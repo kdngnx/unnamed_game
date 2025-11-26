@@ -12,24 +12,24 @@ constexpr uint32_t kBlockSizeInPixels = 20;
 constexpr uint32_t kWindowWidth = (kGameWidth * kBlockSizeInPixels);
 constexpr uint32_t kWindowHeight = (kGameHeight * kBlockSizeInPixels);
 
-struct BulletContext {
+struct Bullet {
     float xpos;
     float ypos;
     uint64_t last_step;
 };
 
-struct AircraftContext {
+struct Aircraft {
     float xpos;
     float ypos;
+    std::vector<Bullet> bullets;
+    uint32_t bullet_length = kBlockSizeInPixels / 2;
+    uint32_t bullet_velocity_ms = 20;
 };
 
 struct AppState {
     SDL_Window *window;
     SDL_Renderer *renderer;
-    AircraftContext aircraft_ctx;
-    std::vector<BulletContext> bullets;
-    uint32_t bullet_length = kBlockSizeInPixels / 2;
-    uint32_t bullet_velocity_ms = 20;
+    Aircraft aircraft;
 };
 
 SDL_AppResult LogErrAndFail(const std::string msg) {
@@ -38,11 +38,10 @@ SDL_AppResult LogErrAndFail(const std::string msg) {
     return SDL_APP_FAILURE;
 }
 
-static void AddBullet(AppState *app) {
-    BulletContext bullet = {app->aircraft_ctx.xpos + app->bullet_length,
-                            app->aircraft_ctx.ypos - app->bullet_length,
-                            SDL_GetTicks()};
-    app->bullets.push_back(bullet);
+static void AddBullet(Aircraft *aircraft) {
+    Bullet bullet = {aircraft->xpos + aircraft->bullet_length,
+                     aircraft->ypos - aircraft->bullet_length, SDL_GetTicks()};
+    aircraft->bullets.push_back(bullet);
 }
 
 // run once at startup
@@ -58,8 +57,8 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
         return LogErrAndFail("Couldn't allocate resources for app state");
     }
     *appstate = app;
-    app->aircraft_ctx.xpos = (kWindowWidth / 2.0f) - kBlockSizeInPixels;
-    app->aircraft_ctx.ypos = kWindowHeight - 2 * kBlockSizeInPixels;
+    app->aircraft.xpos = (kWindowWidth / 2.0f) - kBlockSizeInPixels;
+    app->aircraft.ypos = kWindowHeight - 2 * kBlockSizeInPixels;
     if (!SDL_CreateWindowAndRenderer("unnamed_game", kWindowWidth,
                                      kWindowHeight, SDL_WINDOW_RESIZABLE,
                                      &app->window, &app->renderer)) {
@@ -70,9 +69,8 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
     return SDL_APP_CONTINUE;
 }
 
-static SDL_AppResult HandleKeyDownEvent(AppState *app,
+static SDL_AppResult HandleKeyDownEvent(Aircraft *ctx,
                                         const SDL_Scancode key_code) {
-    AircraftContext *ctx = &app->aircraft_ctx;
     const float xpos = ctx->xpos;
     const float ypos = ctx->ypos;
     switch (key_code) {
@@ -80,7 +78,7 @@ static SDL_AppResult HandleKeyDownEvent(AppState *app,
         case SDL_SCANCODE_Q:
             return SDL_APP_SUCCESS;
         case SDL_SCANCODE_SPACE:
-            AddBullet(app);
+            AddBullet(ctx);
             break;
         case SDL_SCANCODE_LEFT: {
             const float new_pos = ctx->xpos - kBlockSizeInPixels;
@@ -112,11 +110,12 @@ static SDL_AppResult HandleKeyDownEvent(AppState *app,
 
 SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
     AppState *app = (AppState *)appstate;
+    Aircraft *aircraft = &app->aircraft;
     switch (event->type) {
         case SDL_EVENT_QUIT:
             return SDL_APP_SUCCESS;
         case SDL_EVENT_KEY_DOWN:
-            return HandleKeyDownEvent(app, event->key.scancode);
+            return HandleKeyDownEvent(aircraft, event->key.scancode);
         default:
             break;
     }
@@ -126,8 +125,8 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
 SDL_FRect GetAircraftSprite(const AppState *app) {
     SDL_FRect rect;
     SDL_SetRenderDrawColor(app->renderer, 7, 54, 66, SDL_ALPHA_OPAQUE);
-    rect.x = app->aircraft_ctx.xpos;
-    rect.y = app->aircraft_ctx.ypos;
+    rect.x = app->aircraft.xpos;
+    rect.y = app->aircraft.ypos;
     rect.w = rect.h = kBlockSizeInPixels;
     return rect;
 }
@@ -135,35 +134,37 @@ SDL_FRect GetAircraftSprite(const AppState *app) {
 // run once per frame
 SDL_AppResult SDL_AppIterate(void *appstate) {
     AppState *app = (AppState *)appstate;
+    Aircraft *aircraft = &app->aircraft;
     const uint64_t now = SDL_GetTicks();
 
-    SDL_SetRenderDrawColor(app->renderer, 32, 32, 32, SDL_ALPHA_OPAQUE);
+    SDL_SetRenderDrawColor(app->renderer, 200, 200, 200, SDL_ALPHA_OPAQUE);
     SDL_RenderClear(app->renderer);
 
     SDL_FRect aircraft_sprite = GetAircraftSprite(app);
     SDL_RenderFillRect(app->renderer, &aircraft_sprite);
 
-    SDL_SetRenderDrawColor(app->renderer, 123, 231, 32, SDL_ALPHA_OPAQUE);
+    SDL_SetRenderDrawColor(app->renderer, 20, 20, 20, SDL_ALPHA_OPAQUE);
     std::vector<int> removed_bullets;
-    for (int i = 0; i < app->bullets.size(); i++) {
-        if (app->bullets[i].ypos < 0) {
+    for (int i = 0; i < aircraft->bullets.size(); i++) {
+        if (aircraft->bullets[i].ypos < 0) {
             removed_bullets.push_back(i);
             continue;
         }
-        while ((now - app->bullets[i].last_step) >= app->bullet_velocity_ms) {
-            app->bullets[i].ypos--;
-            app->bullets[i].last_step += app->bullet_velocity_ms;
+        while ((now - aircraft->bullets[i].last_step) >=
+               aircraft->bullet_velocity_ms) {
+            aircraft->bullets[i].ypos--;
+            aircraft->bullets[i].last_step += aircraft->bullet_velocity_ms;
         }
-        SDL_RenderLine(app->renderer, app->bullets[i].xpos,
-                       app->bullets[i].ypos - (kBlockSizeInPixels / 2.0f),
-                       app->bullets[i].xpos, app->bullets[i].ypos);
+        SDL_RenderLine(app->renderer, aircraft->bullets[i].xpos,
+                       aircraft->bullets[i].ypos - (kBlockSizeInPixels / 2.0f),
+                       aircraft->bullets[i].xpos, aircraft->bullets[i].ypos);
     }
     SDL_Log("removed bullets: %lu", removed_bullets.size());
 
     for (int index : removed_bullets) {
-        app->bullets.erase(app->bullets.begin() + index);
+        aircraft->bullets.erase(aircraft->bullets.begin() + index);
     }
-    SDL_Log("bullets: %lu", app->bullets.size());
+    SDL_Log("bullets: %lu", aircraft->bullets.size());
 
     SDL_RenderPresent(app->renderer);
     return SDL_APP_CONTINUE;
@@ -174,7 +175,7 @@ void SDL_AppQuit(void *appstate, SDL_AppResult result) {
         AppState *app = (AppState *)appstate;
         SDL_DestroyRenderer(app->renderer);
         SDL_DestroyWindow(app->window);
-        app->bullets.clear();
+        app->aircraft.bullets.clear();
         delete app;
     }
     SDL_Log("app quit successfully");
