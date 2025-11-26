@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.5)
-project(unnamed_game VERSION 1.0 LANGUAGES C)
+project(unnamed_game VERSION 1.0 LANGUAGES CXX)
 
-set(CMAKE_C_STANDARD 17)
-set(CMAKE_C_STANDARD_REQUIRED True)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_C_EXTENSIONS OFF)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # set the output directory for built objects.
 # This makes sure that the dynamic library goes into the build directory automatically.
@@ -18,7 +18,7 @@ set(EXECUTABLE_NAME ${PROJECT_NAME})
 add_executable(${EXECUTABLE_NAME})
 
 # Add your sources to the target
-target_sources(${EXECUTABLE_NAME} PRIVATE src/main.c)
+target_sources(${EXECUTABLE_NAME} PRIVATE src/main.cpp)
 
 # Configure SDL by calling its CMake file.
 # we use EXCLUDE_FROM_ALL so that its install targets and configs don't
